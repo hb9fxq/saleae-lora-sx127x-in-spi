@@ -1,11 +1,11 @@
 {
-  "name": "Semtech SX128x SPI in",
+  "name": "Semtech SX127x SPI",
   "apiVersion": "1.0.0",
-  "author": "Risto Kõiva",
+  "author": "Sebasthian Ogalde",
   "version": "0.0.1",
-  "description": "Semtech SX128x SPI IN HLA",
+  "description": "Semtech SX127x SPI",
   "extensions": {
-    "SX128x SPI in": {
+    "SX127x SPI in": {
       "type": "HighLevelAnalyzer",
       "entryPoint": "sx128x_in.sx128x_in"
     }
