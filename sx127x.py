@@ -9,10 +9,13 @@ class PacketType(Enum):
     BLE = 0x04
     UNDEFINED = 0xFF
 
-class sx128x_in(HighLevelAnalyzer):
+class sx127x(HighLevelAnalyzer):
+    operation_type = {}
+    opmode_type = {}
+
     result_types = {
         "SpiTransaction": {
-            "format": "{{data.dataout}}"
+            "format": '{{data.dataout}}'
         },
         "SpiTransactionError": {
             "format": "ERROR: {{data.error_info}}",
@@ -36,6 +39,47 @@ class sx128x_in(HighLevelAnalyzer):
         
         # Initialize packetType to undefined
         self.packetType = PacketType.UNDEFINED
+
+        self.operation_type["0x00"] = "REG_FIFO"
+        self.operation_type["0x01"] = "REG_OP_MODE"
+        self.operation_type["0x06"] = "REG_FRF_MSB"
+        self.operation_type["0x07"] = "REG_FRF_MID"
+        self.operation_type["0x08"] = "REG_FRF_LSB"
+        self.operation_type["0x09"] = "REG_PA_CONFIG"
+        self.operation_type["0x0b"] = "REG_OCP"
+        self.operation_type["0x0c"] = "REG_LNA"
+        self.operation_type["0x0d"] = "REG_FIFO_ADDR_PTR"
+        self.operation_type["0x0e"] = "REG_FIFO_TX_BASE_ADDR"
+        self.operation_type["0x0f"] = "REG_FIFO_RX_BASE_ADDR"
+        self.operation_type["0x10"] = "REG_FIFO_RX_CURRENT_ADDR"
+        self.operation_type["0x12"] = "REG_IRQ_FLAGS"
+        self.operation_type["0x13"] = "REG_RX_NB_BYTES"
+        self.operation_type["0x14"] = "REG_RX_HEADER_CNT_VAL_MSB"
+        self.operation_type["0x15"] = "REG_RX_HEADER_CNT_VAL_LSB"
+        self.operation_type["0x16"] = "REG_RX_PKT_CNT_VAL_MSB"
+        self.operation_type["0x17"] = "REG_RX_PKT_CNT_VAL_LSB"
+        self.operation_type["0x18"] = "REG_MODEM_STAT"
+        self.operation_type["0x19"] = "REG_PKT_SNR_VALUE"
+        self.operation_type["0x1a"] = "REG_PKT_RSSI_VALUE"
+        self.operation_type["0x1b"] = "REG_RSSI_VALUE"
+        self.operation_type["0x1d"] = "REG_MODEM_CONFIG_1"
+        self.operation_type["0x1e"] = "REG_MODEM_CONFIG_2"
+        self.operation_type["0x20"] = "REG_PREAMBLE_MSB"
+        self.operation_type["0x21"] = "REG_PREAMBLE_LSB"
+        self.operation_type["0x22"] = "REG_PAYLOAD_LENGTH"
+        self.operation_type["0x26"] = "REG_MODEM_CONFIG_3"
+        self.operation_type["0x28"] = "REG_FREQ_ERROR_MSB"
+        self.operation_type["0x29"] = "REG_FREQ_ERROR_MID"
+        self.operation_type["0x2a"] = "REG_FREQ_ERROR_LSB"
+        self.operation_type["0x2c"] = "REG_RSSI_WIDEBAND"
+        self.operation_type["0x31"] = "REG_DETECTION_OPTIMIZE"
+        self.operation_type["0x33"] = "REG_INVERTIQ"
+        self.operation_type["0x37"] = "REG_DETECTION_THRESHOLD"
+        self.operation_type["0x39"] = "REG_SYNC_WORD"
+        self.operation_type["0x3b"] = "REG_INVERTIQ2"
+        self.operation_type["0x40"] = "REG_DIO_MAPPING_1"
+        self.operation_type["0x42"] = "REG_VERSION"
+        self.operation_type["0x4d"] = "REG_PA_DAC"
 
     def handle_enable(self, frame: AnalyzerFrame):
         self.frames = []
@@ -64,11 +108,144 @@ class sx128x_in(HighLevelAnalyzer):
             miso += frame.data["miso"]
             mosi += frame.data["mosi"]
 
-        if len(mosi) > 0:
-            # 0x00 = NOP
-            if len(mosi) >= 1 and mosi[0] == 0x00:
-                return { "dataout": "NOP" }
+        if len(mosi) > 1:
+            writeOrRead = (mosi[0] & 0x80) >> 7
+            binary_operation = mosi[0] & 0x7F
+            binary_operation = "{0:#0{1}x}".format(binary_operation,4)
+            binary_operation = binary_operation.lower()
+            if writeOrRead:
+                writeOrRead = "WRITE"
+            else:
+                writeOrRead = "READ"
+            if binary_operation in self.operation_type.keys():
+                human_readable_operation = self.operation_type[binary_operation]
+            else:
+                human_readable_operation = "UNKNOWN_OP"
 
+            current_dataout = writeOrRead+" "+human_readable_operation
+            # variable_to_be_read = ""
+            # 0x00 = NOP
+            # if len(mosi) >= 1 and operation == 0x00:
+            if writeOrRead == "WRITE":
+                variable_to_be_read = mosi[1]
+            else:
+                variable_to_be_read = miso[1]
+
+            if len(mosi) >= 1 and human_readable_operation == "REG_OP_MODE":
+                data_read = ""
+                variable_range = variable_to_be_read & 0x80
+                variable_lf = variable_to_be_read & 0x8
+                variable_mode = variable_to_be_read & 0x7
+                if variable_range:
+                    data_read += "LORA "
+                else:
+                    data_read += "FSK/OOK "
+                if variable_lf:
+                    data_read += "LF "
+                else:
+                    data_read += "HF "
+                if variable_mode == 0x00:
+                    data_read += "MODE_SLEEP"
+                elif variable_mode == 0x01:
+                    data_read += "MODE_STDBY"
+                elif variable_mode == 0x03:
+                    data_read += "MODE_TX"
+                elif variable_mode == 0x05:
+                    data_read += "MODE_RX_CONT" 
+                elif variable_mode == 0x06:
+                    data_read += "MODE_RX_SINGLE" 
+                return { "dataout": current_dataout+" || "+data_read  }
+
+            if len(mosi) >= 1 and human_readable_operation == "REG_MODEM_CONFIG_1":
+                data_read = ""
+                variable_bw = (variable_to_be_read & 0xF0) >> 4 
+                variable_codingrate = (variable_to_be_read & 0xE) >> 1
+                variable_implicit = variable_to_be_read & 0x1
+                if variable_bw == 0:
+                    data_read += "7.8kHz"
+                elif variable_bw == 1:
+                    data_read += "10.4kHz"
+                elif variable_bw == 2:
+                    data_read += "15.6kHz"
+                elif variable_bw == 3:
+                    data_read += "20.8kHz"
+                elif variable_bw == 4:
+                    data_read += "31.25kHz" 
+                elif variable_bw == 5:
+                    data_read += "41.7kHz" 
+                elif variable_bw == 6:
+                    data_read += "62.5kHz" 
+                elif variable_bw == 7:
+                    data_read += "125kHz" 
+                elif variable_bw == 8:
+                    data_read += "250kHz" 
+                elif variable_bw == 9:
+                    data_read += "500kHz"
+                data_read+=" "
+                if variable_codingrate == 1:
+                    data_read += "cr4/5 "
+                elif variable_codingrate == 2:
+                    data_read += "cr4/6 "
+                elif variable_codingrate == 3:
+                    data_read += "cr4/7 "
+                elif variable_codingrate == 4:
+                    data_read += "cr4/8 "
+                else:
+                    data_read += "crUNK "
+                if variable_implicit:
+                    data_read += "ImplicHdr"
+                else:
+                    data_read += "ExplicHdr"
+
+                return { "dataout": current_dataout+" || "+data_read  }
+
+            if len(mosi) >= 1 and human_readable_operation == "REG_MODEM_CONFIG_2":
+                data_read = ""
+                variable_spreading = (variable_to_be_read & 0xF0) >> 4 
+                variable_txcontmode = (variable_to_be_read & 0xE) >> 1
+                variable_rxcrc = variable_to_be_read & 0x1
+                if variable_spreading == 6:
+                    data_read += "64chips/sym"
+                elif variable_spreading == 7:
+                    data_read += "128chips/sym"
+                elif variable_spreading == 8:
+                    data_read += "256chips/sym"
+                elif variable_spreading == 9:
+                    data_read += "512chips/sym"
+                elif variable_spreading == 10:
+                    data_read += "1024chips/sym" 
+                elif variable_spreading == 11:
+                    data_read += "2048chips/sym" 
+                elif variable_spreading == 12:
+                    data_read += "4096chips/sym" 
+                data_read+=" "
+                if variable_txcontmode:
+                    data_read += "TxContMode "
+                else:
+                    data_read += "TxSingleMode "
+                if variable_rxcrc:
+                    data_read += "RxCrcEn"
+                else:
+                    data_read += "RxCrcDis"
+                return { "dataout": current_dataout+" || "+data_read  }
+
+            if len(mosi) >= 1 and human_readable_operation == "REG_MODEM_CONFIG_3":
+                data_read = ""
+                variable_ldropti = (variable_to_be_read & 0x8) 
+                variable_agcautoon = (variable_to_be_read & 0x4)
+                if variable_ldropti:
+                    data_read += "LowDataRateOptiEn "
+                else:
+                    data_read += "LowDataRateOptiDis "
+                if variable_agcautoon:
+                    data_read += "LNAGainSetByAGC"
+                else:
+                    data_read += "LNAGainSetByReg"
+                return { "dataout": current_dataout+" || "+data_read  }
+
+
+
+            """
             # 0x03 = GetPacketType()
             if len(mosi) >= 3 and len(miso) >= 3 and mosi[0] == 0x03:
                 pType = "UNDEFINED"
@@ -570,6 +747,8 @@ class sx128x_in(HighLevelAnalyzer):
             # 0xD5 = SetSaveContext()
             if len(mosi) >= 1 and mosi[0] == 0xD5:
                 return { "dataout": "SetSaveContext()" }
+            """
+            return { "dataout": current_dataout+" || "+"{0:#0{1}x}".format(variable_to_be_read,4) }
 
         print("Unknown(" + mosi.hex(' ') + ")");
         return { "dataout": "Unknown(" + mosi.hex(' ') + ")" }

@@ -5,9 +5,9 @@
   "version": "0.0.1",
   "description": "Semtech SX127x SPI",
   "extensions": {
-    "SX127x SPI in": {
+    "SX127x SPI": {
       "type": "HighLevelAnalyzer",
-      "entryPoint": "sx128x_in.sx128x_in"
+      "entryPoint": "sx127x.sx127x"
     }
   }
 }
