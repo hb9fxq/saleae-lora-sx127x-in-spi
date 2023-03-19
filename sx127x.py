@@ -134,8 +134,8 @@ class sx127x(HighLevelAnalyzer):
             if len(mosi) >= 1 and human_readable_operation == "REG_OP_MODE":
                 data_read = ""
                 variable_range = variable_to_be_read & 0x80
-                variable_lf = variable_to_be_read & 0x8
-                variable_mode = variable_to_be_read & 0x7
+                variable_lf = variable_to_be_read & 0x08
+                variable_mode = variable_to_be_read & 0x07
                 if variable_range:
                     data_read += "LORA "
                 else:
@@ -148,6 +148,8 @@ class sx127x(HighLevelAnalyzer):
                     data_read += "MODE_SLEEP"
                 elif variable_mode == 0x01:
                     data_read += "MODE_STDBY"
+                elif variable_mode == 0x02:
+                    data_read += "MODE_FREQSYNTH_TX"
                 elif variable_mode == 0x03:
                     data_read += "MODE_TX"
                 elif variable_mode == 0x05:
@@ -159,8 +161,8 @@ class sx127x(HighLevelAnalyzer):
             if len(mosi) >= 1 and human_readable_operation == "REG_MODEM_CONFIG_1":
                 data_read = ""
                 variable_bw = (variable_to_be_read & 0xF0) >> 4 
-                variable_codingrate = (variable_to_be_read & 0xE) >> 1
-                variable_implicit = variable_to_be_read & 0x1
+                variable_codingrate = (variable_to_be_read & 0x0E) >> 1
+                variable_implicit = variable_to_be_read & 0x01
                 if variable_bw == 0:
                     data_read += "7.8kHz"
                 elif variable_bw == 1:
@@ -202,8 +204,8 @@ class sx127x(HighLevelAnalyzer):
             if len(mosi) >= 1 and human_readable_operation == "REG_MODEM_CONFIG_2":
                 data_read = ""
                 variable_spreading = (variable_to_be_read & 0xF0) >> 4 
-                variable_txcontmode = (variable_to_be_read & 0xE) >> 1
-                variable_rxcrc = variable_to_be_read & 0x1
+                variable_txcontmode = (variable_to_be_read & 0x0E) >> 1
+                variable_rxcrc = variable_to_be_read & 0x01
                 if variable_spreading == 6:
                     data_read += "64chips/sym"
                 elif variable_spreading == 7:
@@ -218,6 +220,8 @@ class sx127x(HighLevelAnalyzer):
                     data_read += "2048chips/sym" 
                 elif variable_spreading == 12:
                     data_read += "4096chips/sym" 
+                else:
+                    data_read += "UNKchips/sym("+str(variable_spreading)+")"
                 data_read+=" "
                 if variable_txcontmode:
                     data_read += "TxContMode "
@@ -231,7 +235,7 @@ class sx127x(HighLevelAnalyzer):
 
             if len(mosi) >= 1 and human_readable_operation == "REG_MODEM_CONFIG_3":
                 data_read = ""
-                variable_ldropti = (variable_to_be_read & 0x8) 
+                variable_ldropti = (variable_to_be_read & 0x08) 
                 variable_agcautoon = (variable_to_be_read & 0x4)
                 if variable_ldropti:
                     data_read += "LowDataRateOptiEn "
@@ -243,7 +247,50 @@ class sx127x(HighLevelAnalyzer):
                     data_read += "LNAGainSetByReg"
                 return { "dataout": current_dataout+" || "+data_read  }
 
+            if len(mosi) >= 1 and human_readable_operation == "REG_PA_CONFIG":
+                data_read = ""
+                variable_paselect = variable_to_be_read & 0x80
+                variable_maxpower = (variable_to_be_read & 0x70) >> 4
+                variable_outpwr = variable_to_be_read & 0x0F
+                maxpower = 10.8+0.6*variable_maxpower
+                outputpower = 0
+                if variable_paselect:
+                    data_read += "PA_BOOST pin "
+                    outputpower = 17 - (15-variable_outpwr)
+                else:
+                    data_read += "RFO pin "
+                    outputpower = maxpower - (15-variable_outpwr)
+                data_read = data_read+"MaxPwr"+str(maxpower)+" OutPwr "+str(outputpower)+"dBm"
+                return { "dataout": current_dataout+" || "+data_read  }
 
+            if len(mosi) >= 1 and human_readable_operation == "REG_IRQ_FLAGS":
+                data_read = ""
+                variable_rxto = variable_to_be_read & 0x80
+                variable_rxdone = variable_to_be_read & 0x40
+                variable_plcrc = variable_to_be_read & 0x20
+                variable_validh = variable_to_be_read & 0x10
+                variable_txdone = variable_to_be_read & 0x08
+                variable_caddone = variable_to_be_read & 0x04
+                variable_fhsscc = variable_to_be_read & 0x02
+                variable_caddetect = variable_to_be_read & 0x01
+                
+                if variable_rxto:
+                    data_read += "RxTimeout "
+                if variable_rxdone:
+                    data_read += "RxDone "
+                if variable_plcrc:
+                    data_read += "PayloadCrcErr "
+                if variable_validh:
+                    data_read += "ValidHdr "
+                if variable_txdone:
+                    data_read += "TxDone "
+                if variable_caddone:
+                    data_read += "CadDone "
+                if variable_fhsscc:
+                    data_read += "FhssChgCh "
+                if variable_caddetect:
+                    data_read += "CadDtct "
+                return { "dataout": current_dataout+" || "+data_read  }
 
             """
             # 0x03 = GetPacketType()
